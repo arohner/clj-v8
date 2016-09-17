@@ -19,6 +19,24 @@
       ["Linux" "i686"]      ["linux/x86/" ".so"]
       (throw (Exception. (str "Unsupported OS/archetype: " os-name " " os-arch))))))
 
+(defn loaded-native-libs []
+  (let [loaded-library-names (.getDeclaredField java.lang.ClassLoader "loadedLibraryNames")
+        loaded-library-names-vector (do (.setAccessible loaded-library-names true)
+                                        (.get loaded-library-names java.lang.ClassLoader))]
+    loaded-library-names-vector))
+
+(defn native-lib-loaded?
+  ""
+  [path]
+
+  ;; libs can get loaded through diffrent symlinked dirs, so just compare filenames
+
+  (some #(= (.getName (io/file %)) (.getName (io/file path))) (loaded-native-libs)))
+
+(defn maybe-native-load [path]
+  (when-not (native-lib-loaded? path)
+    (System/load path)))
+
 (defn load-library-from-class-path
   [name path-postfix]
   (let [[binary-path binary-extension] (find-file-path-fragments)
@@ -30,7 +48,7 @@
     (io/copy in out)
     (.close out)
     (.close in)
-    (System/load (.getAbsolutePath tmp))
+    (maybe-native-load (.getAbsolutePath tmp))
     (.deleteOnExit tmp)))
 
 (try
